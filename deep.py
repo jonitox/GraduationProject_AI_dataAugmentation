@@ -18,6 +18,7 @@ from imgaug import augmenters as iaa
 from imgaug import imgaug
 from conv2d import Conv2d
 from max_pool_2d import MaxPool2d
+from fclayer import fclayer
 import datetime
 import io
 
@@ -54,9 +55,9 @@ class Network:
             layers.append(Conv2d(strides=[1, 1, 1, 1], output_channels=96, name='conv_3'))
             layers.append(MaxPool2d(kernel_size=2, name='max_3'))
 
-            layers.append(layer(24567,2000), name = 'L1')
-            layers.append(layer(2000,200), name = 'L2')
-            layers.append(layer(200,20), name = 'L3')
+            layers.append(fclayer(24567,2000), name = 'L1')
+            layers.append(fclayer(2000,200), name = 'L2')
+            layers.append(fclayer(200,20), name = 'L3')
 
         self.inputs = tf.placeholder(tf.float32, [None, self.IMAGE_HEIGHT, self.IMAGE_WIDTH, self.IMAGE_CHANNELS],
                                      name='inputs')
