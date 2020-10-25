@@ -1,5 +1,3 @@
-
-# Lab 11 MNIST and Convolutional Neural Network
 import math
 import os
 import time
@@ -16,94 +14,108 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import gen_nn_ops
 from PIL import Image
 
+from imgaug import augmenters as iaa
+from imgaug import imgaug
+from conv2d import Conv2d
+from max_pool_2d import MaxPool2d
 import datetime
 import io
-import random
 
 np.set_printoptions(threshold=np.nan)
 
-# import matplotlib.pyplot as plt
 
-tf.set_random_seed(777)  # reproducibility
+# @ops.RegisterGradient("MaxPoolWithArgmax")
+# def _MaxPoolWithArgmaxGrad(op, grad, unused_argmax_grad):
+#     return gen_nn_ops._max_pool_grad(op.inputs[0],
+#                                      op.outputs[0],
+#                                      grad,
+#                                      op.get_attr("ksize"),
+#                                      op.get_attr("strides"),
+#                                      padding=op.get_attr("padding"),
+#                                      data_format='NHWC')
 
-
-# Check out https://www.tensorflow.org/get_started/mnist/beginners for
-# more information about the mnist dataset
 
 class Network:
-    def __init__(self, layers=None, per_image_standardization=True, batch_norm=True, skip_connections=True):
-        # hyper parameters
-        learning_rate = 0.001
-        training_epochs = 15
-        # input place holders
-        self.X = tf.placeholder(tf.float32, [None, 128, 128])
-        X_img = tf.reshape(self.X, [-1, 128, 128, 1])   # img 128x128x1 (black/white)
-        self.Y = tf.placeholder(tf.float32, [None, 20])
-        self.is_training = tf.placeholder_with_default(False, [], name='is_training')
-        # L1 ImgIn shape=(?, 128, 128, 1)
-        W1 = tf.Variable(tf.random_normal([3, 3, 1, 32], stddev=0.01))
-        #    Conv     -> (?, 128, 128, 32)
-        #    Pool     -> (?, 64, 64, 32)
-        L1 = tf.nn.conv2d(X_img, W1, strides=[1, 1, 1, 1], padding='SAME')
-        L1 = tf.nn.relu(L1)
-        L1 = tf.nn.max_pool(L1, ksize=[1, 2, 2, 1],
-                            strides=[1, 2, 2, 1], padding='SAME')
-        '''
-        Tensor("Conv2D:0", shape=(?, 128, 128, 32), dtype=float32)
-        Tensor("Relu:0", shape=(?, 128, 128, 32), dtype=float32)
-        Tensor("MaxPool:0", shape=(?, 64, 64, 32), dtype=float32)
-        '''
-        W2 = tf.Variable(tf.random_normal([3, 3, 32, 64], stddev=0.01))
-        #    Conv     -> (?, 64, 64, 64)
-        #    Pool     -> (?, 32, 32, 64)
-        L2 = tf.nn.conv2d(L1, W2, strides=[1, 1, 1, 1], padding='SAME')
-        L2 = tf.nn.relu(L2)
-        L2 = tf.nn.max_pool(L2, ksize=[1, 2, 2, 1],
-                            strides=[1, 2, 2, 1], padding='SAME')
-        # L3 ImgIn shape=(?, 32, 32, 64)
-        W3 = tf.Variable(tf.random_normal([3, 3, 64, 96], stddev=0.01))
-        #    Conv      ->(?, 32, 32, 96)
-        #    Pool      ->(?, 16, 16, 96)
-        L3 = tf.nn.conv2d(L2, W3, strides=[1, 1, 1, 1], padding='SAME')
-        L3 = tf.nn.relu(L3)
-        L3 = tf.nn.max_pool(L3, ksize=[1, 2, 2, 1],
-                            strides=[1, 2, 2, 1], padding='SAME')
-        L3_flat = tf.reshape(L3, [-1, 16 * 16 * 96])
-        '''
-        Tensor("Conv2D_1:0", shape=(?, 14, 14, 64), dtype=float32)
-        Tensor("Relu_1:0", shape=(?, 14, 14, 64), dtype=float32)
-        Tensor("MaxPool_1:0", shape=(?, 7, 7, 64), dtype=float32)
-        Tensor("Reshape_1:0", shape=(?, 3136), dtype=float32)
-        '''
+    IMAGE_HEIGHT = 128
+    IMAGE_WIDTH = 128
+    IMAGE_CHANNELS = 1
 
-        # Final FC 7x7x64 inputs -> 20 outputs
-        W4 = tf.Variable(tf.random_normal([16 * 16 * 96, 20],stddev=0.01))
-        b = tf.Variable(tf.random_normal([20]))
-        self.logits = tf.matmul(L3_flat, W4) + b
+    def __init__(self, layers=None, per_image_standardization=True, batch_norm=True, skip_connections=True):
+        # Define network - ENCODER (decoder will be symmetric).
+
+        if layers == None:
+            layers = []
+            layers.append(Conv2d(strides=[1, 1, 1, 1], output_channels=32, name='conv_1'))
+            layers.append(MaxPool2d(kernel_size=2, name='max_1', skip_connection=skip_connections))
+
+            layers.append(Conv2d(strides=[1, 1, 1, 1], output_channels=64, name='conv_2')
+            layers.append(MaxPool2d(kernel_size=2, name='max_2', skip_connection=skip_connections))
+
+            layers.append(Conv2d(strides=[1, 1, 1, 1], output_channels=96, name='conv_3'))
+            layers.append(MaxPool2d(kernel_size=2, name='max_3'))
+
+            layers.append(layer(24567,2000), name = 'L1')
+            layers.append(layer(2000,200), name = 'L2')
+            layers.append(layer(200,20), name = 'L3')
+
+        self.inputs = tf.placeholder(tf.float32, [None, self.IMAGE_HEIGHT, self.IMAGE_WIDTH, self.IMAGE_CHANNELS],
+                                     name='inputs')
+        self.targets = tf.placeholder(tf.float32, [None, 1, 20, 1], name='targets')
+        self.is_training = tf.placeholder_with_default(False, [], name='is_training')
         self.description = ""
-        self.cost = tf.reduce_mean(tf.square(self.logits -self.Y))
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.cost)
+
+        self.layers = {}
+
+        if per_image_standardization:
+            list_of_images_norm = tf.map_fn(tf.image.per_image_standardization, self.inputs)
+            net = tf.stack(list_of_images_norm)
+        else:
+            net = self.inputs
+
+        # ENCODER
+        for layer in layers:
+            self.layers[layer.name] = net = layer.create_layer(net)
+            self.description += "{}".format(layer.get_description())
+
+        print("Current input shape: ", net.get_shape())
+
+        layers.reverse()
+        Conv2d.reverse_global_variables()
+
+        # DECODER
+        for layer in layers:
+            net = layer.create_layer_reversed(net, prev_layer=self.layers[layer.name])
+
+        self.segmentation_result = tf.sigmoid(net)
+
+        # segmentation_as_classes = tf.reshape(self.y, [50 * self.IMAGE_HEIGHT * self.IMAGE_WIDTH, 1])
+        # targets_as_classes = tf.reshape(self.targets, [50 * self.IMAGE_HEIGHT * self.IMAGE_WIDTH])
+        # print(self.y.get_shape())
+        # self.cost = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(segmentation_as_classes, targets_as_classes))
+        print('segmentation_result.shape: {}, targets.shape: {}'.format(self.segmentation_result.get_shape(),
+                                                                        self.targets.get_shape()))
+
+        # MSE loss
+        self.cost = tf.sqrt(tf.reduce_mean(tf.square(self.segmentation_result - self.targets)))
+        self.train_op = tf.train.AdamOptimizer().minimize(self.cost)
         with tf.name_scope('accuracy'):
-            argmax_probs = tf.round(self.logits)  # 0x1
-            correct_pred = tf.cast(tf.equal(argmax_probs, self.Y), tf.float32)
+            argmax_probs = tf.round(self.segmentation_result)  # 0x1
+            correct_pred = tf.cast(tf.equal(argmax_probs, self.targets), tf.float32)
             self.accuracy = tf.reduce_mean(correct_pred)
 
-            #tf.summary.scalar('accuracy', self.accuracy)
+            tf.summary.scalar('accuracy', self.accuracy)
 
-        #self.summaries = tf.summary.merge_all()
-    
+        self.summaries = tf.summary.merge_all()
+
+
 class Dataset:
     def __init__(self, batch_size, folder='voc'):
         self.batch_size = batch_size
 
-        train_inputs, validation_inputs = self.train_valid_split(
-            os.listdir(os.path.join(folder, 'inputs')))
-        train_targets, validation_targets = self.train_valid_split(
-            os.listdir(os.path.join(folder, 'targets')))
+        train_inputs = os.listdir(os.path.join(folder, 'inputs'))
+        train_targets = os.listdir(os.path.join(folder, 'targets'))
         self.train_inputs = self.file_paths_to_input(folder, train_inputs)
-        self.validation_inputs = self.file_paths_to_input(folder, validation_inputs)
         self.train_targets = self.file_paths_to_target(folder, train_targets)
-        self.validation_targets = self.file_paths_to_target(folder, validation_targets)
 
         self.pointer = 0
 
@@ -120,7 +132,7 @@ class Dataset:
             inputs.append(test_image)
 
         return inputs
-    
+
     def file_paths_to_target(self, folder, files_list, verbose=False):
         targets = []
 
@@ -129,24 +141,16 @@ class Dataset:
             # test_image = np.multiply(test_image, 1.0 / 255)
             targets_array = np.genfromtxt(targets_array)
             targets_array=np.array(targets_array)
+            targets_array=np.reshape(targets_array,(1,20))
             targets.append(targets_array)
-            
-        return targets    
 
-    def train_valid_split(self, X, ratio=None):
-        if ratio is None:
-            ratio = (0.75, .25)
+        return targets
 
-        N = len(X)
-        return (
-            X[:int(ceil(N * ratio[0]))],
-            X[int(ceil(N * ratio[0])):]
-        )
     def num_batches_in_epoch(self):
         return int(math.floor(len(self.train_inputs) / self.batch_size))
 
     def reset_batch_pointer(self):
-        permutation = np.random.RandomState(seed=42).permutation(len(self.train_inputs))
+        permutation = np.random.permutation(len(self.train_inputs))
         self.train_inputs = [self.train_inputs[i] for i in permutation]
         self.train_targets = [self.train_targets[i] for i in permutation]
 
@@ -165,78 +169,137 @@ class Dataset:
         return np.array(inputs, dtype=np.uint8), np.array(targets, dtype=np.uint8)
 
     @property
-    def validation_set(self):
-        return np.array(self.validation_inputs, dtype=np.uint8), np.array(self.validation_targets, dtype=np.uint8)
+    def test_set(self):
+        return np.array(self.test_inputs, dtype=np.uint8), np.array(self.test_targets, dtype=np.uint8)
 
-class train():
-    # hyper parameters
-    learning_rate = 0.001
-    batch_size = 100
+
+def train():
+    BATCH_SIZE = 5
+
     network = Network()
+
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
 
-    
-    #os.makedirs(os.path.join('save', network.description, timestamp))
+    # create directory for saving models
+    os.makedirs(os.path.join('save', network.description, timestamp))
 
     dataset = Dataset(folder='voc',
-                      batch_size=batch_size)
+                      batch_size=BATCH_SIZE)
 
+    inputs, targets = dataset.next_batch()
+    print(inputs.shape, targets.shape)
 
-    # initialize
+    # augmentation_seq = iaa.Sequential([
+    #     iaa.Crop(px=(0, 16)),  # crop images from each side by 0 to 16px (randomly chosen)
+    #     iaa.Fliplr(0.5),  # horizontally flip 50% of the images
+    #     iaa.GaussianBlur(sigma=(0, 2.0))  # blur images with a sigma of 0 to 3.0
+    # ])
+
+    augmentation_seq = iaa.Sequential([
+        iaa.Crop(px=(0, 16), name="Cropper"),  # crop images from each side by 0 to 16px (randomly chosen)
+        #iaa.Fliplr(0.5, name="Flipper"),
+        iaa.GaussianBlur((0, 3.0), name="GaussianBlur"),
+        iaa.Dropout(0.02, name="Dropout"),
+        iaa.AdditiveGaussianNoise(scale=0.01 * 255, name="GaussianNoise")
+        #iaa.Affine(translate_px={"x": (-network.IMAGE_HEIGHT // 3, network.IMAGE_WIDTH // 3)}, name="Affine")
+    ])
+
+    # change the activated augmenters for binary masks,
+    # we only want to execute horizontal crop, flip and affine transformation
+    def activator_binmasks(images, augmenter, parents, default):
+        if augmenter.name in ["GaussianBlur", "Dropout", "GaussianNoise"]:
+            return False
+        else:
+            # default value for all other augmenters
+            return default
+
+    hooks_binmasks = imgaug.HooksImages(activator=activator_binmasks)
+
+#    augmentation_seq1 = iaa.Sequential([
+#        iaa.Crop(px=(0, 10), name="Cropper"),  # crop images from each side by 0 to 16px (randomly chosen)
+#        iaa.GaussianBlur((0, 3.0), name="GaussianBlur"),
+#        iaa.Dropout(0.02, name="Dropout"),
+#        iaa.AdditiveGaussianNoise(scale=0.01 * 255, name="GaussianNoise"),
+#    ])
+#
+#    augmentation_seq_deterministic1 = augmentation_seq1.to_deterministic()
+#
+#    multi_inputs = np.reshape(dataset.train_inputs,(len(dataset.train_inputs), network.IMAGE_HEIGHT, network.IMAGE_WIDTH, 1))
+#    multi_targets = np.reshape(dataset.train_targets,(len(dataset.train_targets), network.IMAGE_HEIGHT, network.IMAGE_WIDTH, 1))
+#    multi_inputs = augmentation_seq_deterministic1.augment_images(multi_inputs)
+#    multi_targets = augmentation_seq_deterministic1.augment_images(multi_targets, hooks=hooks_binmasks)
+#
+#    for i in range(len(dataset.train_inputs)):
+#            temp_inputs = np.reshape(multi_inputs[i],(network.IMAGE_HEIGHT, network.IMAGE_WIDTH))
+#            temp_targets = np.reshape(multi_targets[i],(network.IMAGE_HEIGHT, network.IMAGE_WIDTH))
+#            dataset.train_inputs.append(temp_inputs)
+#            dataset.train_targets.append(temp_targets)
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        #summary_writer = tf.summary.FileWriter('{}/{}-{}'.format('logs', network.description, timestamp),
-        #                                        graph=tf.get_default_graph())
+
+        summary_writer = tf.summary.FileWriter('{}/{}-{}'.format('logs', network.description, timestamp),
+                                               graph=tf.get_default_graph())
         saver = tf.train.Saver(tf.all_variables(), max_to_keep=None)
+
         test_accuracies = []
-        training_epochs = 15
-        global_start=time.time()
-        # train my model
-        print('Learning started. It takes sometime.')
-        for epoch in range(training_epochs):
-            avg_cost = 0
-            total_batch = dataset.num_batches_in_epoch()
+        # Fit all training data
+        n_epochs = 5
+        global_start = time.time()
+        for epoch_i in range(n_epochs):
             dataset.reset_batch_pointer()
-            for i in range(total_batch):
+
+            for batch_i in range(dataset.num_batches_in_epoch()):
+                batch_num = epoch_i * dataset.num_batches_in_epoch() + batch_i + 1
+
+                augmentation_seq_deterministic = augmentation_seq.to_deterministic()
+
+                start = time.time()
                 batch_inputs, batch_targets = dataset.next_batch()
-                batch_num = epoch * dataset.num_batches_in_epoch() + i + 1
                 batch_inputs = np.reshape(batch_inputs,
-                        (dataset.batch_size, 128, 128))
+                                          (dataset.batch_size, network.IMAGE_HEIGHT, network.IMAGE_WIDTH, 1))
                 batch_targets = np.reshape(batch_targets,
-                        (dataset.batch_size, 20))
-                feed_dict = {network.X: batch_inputs, network.Y: batch_targets}
-                c, _ = sess.run([network.cost, network.optimizer], feed_dict=feed_dict)
-                avg_cost += c / total_batch
+                                           (dataset.batch_size, 20))
+
+                batch_inputs = augmentation_seq_deterministic.augment_images(batch_inputs)
+                batch_inputs = np.multiply(batch_inputs, 1.0 / 255)
+
+                batch_targets = augmentation_seq_deterministic.augment_images(batch_targets, hooks=hooks_binmasks)
+
+                cost, _ = sess.run([network.cost, network.train_op],
+                                   feed_dict={network.inputs: batch_inputs, network.targets: batch_targets,
+                                              network.is_training: True})
                 end = time.time()
-                if batch_num % 100 == 0 or batch_num == training_epochs * dataset.num_batches_in_epoch():
-                    validation_inputs, validation_targets = dataset.validation_set
+                print('{}/{}, epoch: {}, cost: {}, batch time: {}'.format(batch_num,
+                                                                          n_epochs * dataset.num_batches_in_epoch(),
+                                                                          epoch_i, cost, end - start))
+
+                if batch_num % 100 == 0 or batch_num == n_epochs * dataset.num_batches_in_epoch():
+                    test_inputs, test_targets = dataset.test_set
                     # test_inputs, test_targets = test_inputs[:100], test_targets[:100]
 
-                    validation_inputs = np.reshape(validation_inputs, (-1, 128, 128))
-                    validation_targets = np.reshape(validation_targets, (-1, 20))
-                   
+                    test_inputs = np.reshape(test_inputs, (-1, network.IMAGE_HEIGHT, network.IMAGE_WIDTH, 1))
+                    test_targets = np.reshape(test_targets, (-1, network.IMAGE_HEIGHT, network.IMAGE_WIDTH, 1))
+                    test_inputs = np.multiply(test_inputs, 1.0 / 255)
 
-                    validation_accuracy = sess.run(network.accuracy,
-                                                        feed_dict={network.X: validation_inputs,
-                                                                network.Y: validation_targets,
-                                                                network.is_training: False})
+                    print(test_inputs.shape)
+                    summary, test_accuracy = sess.run([network.summaries, network.accuracy],
+                                                      feed_dict={network.inputs: test_inputs,
+                                                                 network.targets: test_targets,
+                                                                 network.is_training: False})
 
-                    #summary_writer.add_summary(summary, batch_num)
+                    summary_writer.add_summary(summary, batch_num)
 
-                    print('Step {}, test accuracy: {}'.format(batch_num, validation_accuracy))
-                    test_accuracies.append((validation_accuracy, batch_num))
+                    print('Step {}, test accuracy: {}'.format(batch_num, test_accuracy))
+                    test_accuracies.append((test_accuracy, batch_num))
+                    print("Accuracies in time: ", [test_accuracies[x][0] for x in range(len(test_accuracies))])
                     max_acc = max(test_accuracies)
                     print("Best accuracy: {} in batch {}".format(max_acc[0], max_acc[1]))
                     print("Total time: {}".format(time.time() - global_start))
 
-                    if validation_accuracy >= max_acc[0]:
+                    if test_accuracy >= max_acc[0]:
                         checkpoint_path = os.path.join('save', network.description, timestamp, 'model.ckpt')
                         saver.save(sess, checkpoint_path, global_step=batch_num)
-
-
-            print('Epoch:', '%04d' % (epoch + 1), 'cost =', '{:.9f}'.format(avg_cost))
-
-        print('Learning Finished!')
 
 
 if __name__ == '__main__':
