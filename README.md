@@ -14,7 +14,7 @@ OS - Linux, ubuntu
 
 # Model
 task를 수행하기 위한 CNN model을 설계하였습니다. model의 구성은 다음과 같습니다.   
-3 Convolutional layers(CNN) with Max-Pooling and some zero-paddings, 3 Fully-connected layers(FCNN) with ReLU for flattend output.   
+3 Convolutional layers(CNN) made by 3*3 filters, 2-zero-paddings, 1-stride with Max-pooling. 3 Fully-connected layers(FCNN) for flattend output. ReLU is used for the actiavtion function  
 The final output is 20-lengths array made by Softmax function which represents the class of input image.   
 <img src="/description/model.png" width="600px" height="350px" alt="1"></img>   
 
