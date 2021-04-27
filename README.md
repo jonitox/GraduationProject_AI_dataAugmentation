@@ -1,11 +1,11 @@
-# Graduation Project 
-# Multi-label classification performance improvement using data augmentation on deep learning
+
+# Multi-label classification performance improvement using data augmentation on deep learning - Graduation Project
 > ## 개요
-> 본 프로젝트는 전기전자공학부 졸업논문으로 진행한 연구로서, 딥러닝 분야의 multi-label image classification 과제에 training data가 제한적인 경우에 있어서, accuracy를 증가시키기 위한 기법 중 하나인 Data Augmentation에 관한 연구입니다. 기존의 제한된 image data를 처리해 변형시킨 data를 생성하고 학습에 사용하여 accuracy를 보다 더 향상시킬 수있는 methods of augmentation, usages of augmentation 등을 실험 및 비교한 프로젝트입니다.   
+> 본 프로젝트는 전기전자공학부 졸업논문으로서 진행한 연구입니다. 딥러닝 분야의 multi-label image classification 과제에 training data가 제한적인 경우에 있어서, accuracy를 증가시키기 위한 기법 중 하나인 Data Augmentation에 관한 연구입니다. 기존의 제한된 image data를 처리해 변형시킨 data를 생성하고 학습에 사용하여 accuracy를 보다 더 향상시킬 수있는 methods of augmentation, usages of augmentation 등을 실험 및 비교한 프로젝트입니다.   
 
 # 개발환경   
 language - Python3   
-lib - TensorFlow   
+framework - TensorFlow   
 OS - Linux, ubuntu   
 
 
